@@ -54,8 +54,6 @@ The system aims to provide:
 
 ### Scope disclaimer
 
-This project is **not** a reproduction of Toyota Motor Manufacturing Indonesia's internal systems or business processes.
-
 It is an independent portfolio project inspired by general operational challenges commonly found in manufacturing and logistics environments. All workflows, data models, and architecture are designed for educational and demonstration purposes only.
 
 The goal is not to build a complete enterprise logistics system, but to demonstrate how a small distributed application can be designed around meaningful business boundaries using:
