@@ -1,0 +1,28 @@
+# Git history — not needed in the image
+.git
+.gitignore
+
+# Environment — secrets must not be baked in
+.env
+
+# Agent workspace & orchestration (not needed at runtime)
+workspace
+agent-context
+orchestrator
+
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# Node modules
+**/node_modules/
+
+# Frontend local build output
+**/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
