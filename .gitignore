@@ -1,0 +1,52 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+**/[Rr]elease/
+
+# Node
+node_modules/
+dist/
+.npm/
+.yarn/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets
+.env
+
+# Test results
+TestResults/
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker / build artifacts
+logs/
+*.log
+
+# Agent workspace (local run state)
+workspace/.context/
+agent-context/
+AGENTS.md
+
+# Orchestrator
+orchestrator/*.log
+
+# Pi coding agent local artifacts
+.pi/
