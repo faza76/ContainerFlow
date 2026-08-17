@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/ContainerFlow.Contracts/ContainerFlow.Contracts.csproj" />
+    <Project Path="src/BuildingBlocks/ContainerFlow.Shared/ContainerFlow.Shared.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/Booking/">
+    <Project Path="src/Services/Booking/ContainerFlow.Booking.Api/ContainerFlow.Booking.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Container/">
+    <Project Path="src/Services/Container/ContainerFlow.Container.Api/ContainerFlow.Container.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Notification/">
+    <Project Path="src/Services/Notification/ContainerFlow.Notification.Api/ContainerFlow.Notification.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ContainerFlow.Booking.Tests/ContainerFlow.Booking.Tests.csproj" />
+    <Project Path="tests/ContainerFlow.Container.Tests/ContainerFlow.Container.Tests.csproj" />
+    <Project Path="tests/ContainerFlow.Notification.Tests/ContainerFlow.Notification.Tests.csproj" />
+  </Folder>
+</Solution>
