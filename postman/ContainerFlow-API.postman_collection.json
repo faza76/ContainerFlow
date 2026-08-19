@@ -1,0 +1,623 @@
+{
+	"info": {
+		"name": "ContainerFlow API",
+		"description": "ContainerFlow maritime container shipment tracking platform.\n\n## Getting started\n1. Start the services: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`\n2. Open this collection in Postman\n3. Click **Variables** → ensure all are set (defaults work for local dev)\n4. Run **📋 Health** requests first to confirm all services are up\n5. JWT tokens auto-generate before every request via the collection Pre-request Script\n\n## HTTP Status Codes You'll See\n- `201 Created` — resource created\n- `200 OK` — success, return body\n- `401 Unauthorized` — missing/invalid token\n- `403 Forbidden` — role doesn't have permission\n- `404 Not Found` — resource doesn't exist\n- `409 Conflict` — business rule violation (invalid transition, duplicate allocation)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+	},
+	"item": [
+		{
+			"name": "📋 Health",
+			"description": "Check that all services are running and their dependencies (PostgreSQL, RabbitMQ) are reachable.",
+			"item": [
+				{
+					"name": "GET Booking Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{bookingUrl}}/health",
+							"host": ["{{bookingUrl}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Container Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{containerUrl}}/health",
+							"host": ["{{containerUrl}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Notification Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{notificationUrl}}/health",
+							"host": ["{{notificationUrl}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "📦 Booking",
+			"description": "Booking lifecycle: create, confirm, cancel. Booking events propagate via RabbitMQ to the Notification Service.\n\n**Auth:** admin/staff = full manage, customer = create + view own only.\n\n**State machine:** PENDING → CONFIRMED → IN_PROGRESS → COMPLETED (CANCELLED from any active state).",
+			"item": [
+				{
+					"name": "POST Create Booking",
+					"description": "Creates a new booking in PENDING status. Publishes `BookingCreated` event (consumed by Notification Service).\n\nStores the returned `id` and `bookingNumber` as collection variables for subsequent requests.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"customerName\": \"ACME Logistics\",\n    \"origin\": \"Rotterdam\",\n    \"destination\": \"Singapore\",\n    \"cargo\": \"Automotive components\",\n    \"containerType\": \"FT40\",\n    \"containerCount\": 2,\n    \"vessel\": \"MV Maersk Voyager\",\n    \"voyage\": \"V124\"\n}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const json = pm.response.json();",
+									"    pm.collectionVariables.set(\"eventId\", json.id);",
+									"    pm.collectionVariables.set(\"bookingNumber\", json.bookingNumber);",
+									"    console.log(\"Booking created:\", json.bookingNumber);",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "GET List Bookings (admin)",
+					"description": "Admin/staff see all bookings. Customer token would only return own bookings.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET List Bookings (customer)",
+					"description": "Customers see only bookings where CustomerId matches their customer_id claim.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Booking by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings/{{eventId}}",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings", "{{eventId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PUT Update Booking",
+					"description": "Updates editable fields (origin, destination, cargo, etc.). Cannot change status — use confirm/cancel for that.",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"origin\": \"Rotterdam\",\n    \"destination\": \"Felixstowe\",\n    \"cargo\": \"Automotive components - priority\",\n    \"containerType\": \"FT40\",\n    \"containerCount\": 3,\n    \"vessel\": \"MV Maersk Voyager\",\n    \"voyage\": \"V124A\"\n}"
+						},
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings/{{eventId}}",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings", "{{eventId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Confirm Booking",
+					"description": "Advances PENDING → CONFIRMED. Publishes `BookingConfirmed` event.\n\n**Business rule:** Confirming a CANCELLED booking returns 409 Conflict.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings/{{eventId}}/confirm",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings", "{{eventId}}", "confirm"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Cancel Booking",
+					"description": "Cancels from any active state. Cannot cancel an already-cancelled booking (409).\n\n**Note:** cancellation does NOT publish an event (only BookingCreated and BookingConfirmed are published per spec).",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings/{{eventId}}/cancel",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings", "{{eventId}}", "cancel"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Confirm Cancelled (should 409)",
+					"description": "**DoD evidence:** Attempting to confirm a CANCELLED booking must return 409 Conflict. This proves the state-machine enforcement.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings/{{eventId}}/confirm",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings", "{{eventId}}", "confirm"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "🚢 Container",
+			"description": "Container lifecycle: register, allocate to a booking, move through operational stages.\n\n**Auth:** admin/staff only (customer role gets 403 on all container endpoints).\n\n**State machine:** AVAILABLE → ALLOCATED → IN_YARD → LOADED → IN_TRANSIT → DISCHARGED → DELIVERED → AVAILABLE (return to pool).\n\n**Business rule (from README):** An already-allocated container cannot be allocated to another shipment.",
+			"item": [
+				{
+					"name": "POST Register Container",
+					"description": "Registers a new container in AVAILABLE status. `teu` is optional (auto-computed from type: FT20=1, others=2).",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"containerNumber\": \"MSCU9876543\",\n    \"type\": \"FT40\",\n    \"teu\": null\n}"
+						},
+						"url": {
+							"raw": "{{containerUrl}}/api/containers",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers"]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    pm.collectionVariables.set(\"containerId\", pm.response.json().id);",
+									"    pm.collectionVariables.set(\"containerNumber\", pm.response.json().containerNumber);",
+									"    console.log(\"Container registered:\", pm.response.json().containerNumber);",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "GET List Containers",
+					"description": "Optional `?status=AVAILABLE` query param filters by status.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{containerUrl}}/api/containers",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Container by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{containerUrl}}/api/containers/{{containerId}}",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers", "{{containerId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Allocate Container",
+					"description": "Allocates the container to your booking. Publishes `ContainerAllocated` → the Booking Service consumes this and auto-advances the booking to IN_PROGRESS.\n\n**Business rule:** If the container is not AVAILABLE, returns 409 Conflict.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bookingId\": \"{{eventId}}\",\n    \"bookingNumber\": \"{{bookingNumber}}\"\n}"
+						},
+						"url": {
+							"raw": "{{containerUrl}}/api/containers/{{containerId}}/allocate",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers", "{{containerId}}", "allocate"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Booking Status (expect IN_PROGRESS)",
+					"description": "After allocation, the Booking Service should have consumed `ContainerAllocated` and advanced the booking to IN_PROGRESS. This confirms the cross-service event-driven integration works.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings/{{eventId}}",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings", "{{eventId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Move Container → IN_YARD",
+					"description": "Moves the container. Publishes `ContainerStatusChanged`.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"newStatus\": \"IN_YARD\",\n    \"location\": \"Gate 5 - Marshalling Yard\"\n}"
+						},
+						"url": {
+							"raw": "{{containerUrl}}/api/containers/{{containerId}}/move",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers", "{{containerId}}", "move"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Move Container → LOADED",
+					"description": "Shipment-stage change (IN_YARD → LOADED). Publishes both `ContainerStatusChanged` AND `ShipmentStatusChanged` — creates notifications for both.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"newStatus\": \"LOADED\",\n    \"location\": \"Port of Rotterdam - Berth 7\"\n}"
+						},
+						"url": {
+							"raw": "{{containerUrl}}/api/containers/{{containerId}}/move",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers", "{{containerId}}", "move"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Utilization",
+					"description": "Returns TEU capacity, allocated, available, and utilization percentage — chartable directly for the Dashboard.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{containerUrl}}/api/containers/utilization",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers", "utilization"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Allocate Already-Allocated (expect 409)",
+					"description": "**DoD evidence:** Attempting to allocate an already-allocated container should return 409 Conflict with a clear error message.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"bookingId\": \"{{eventId}}\",\n    \"bookingNumber\": \"{{bookingNumber}}\"\n}"
+						},
+						"url": {
+							"raw": "{{containerUrl}}/api/containers/{{containerId}}/allocate",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers", "{{containerId}}", "allocate"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Invalid Move (expect 409)",
+					"description": "**DoD evidence:** Attempting an invalid status transition (e.g., LOADED → IN_YARD) must return 409 Conflict.",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"newStatus\": \"IN_YARD\"\n}"
+						},
+						"url": {
+							"raw": "{{containerUrl}}/api/containers/{{containerId}}/move",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers", "{{containerId}}", "move"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Containers (customer — expect 403)",
+					"description": "**DoD evidence:** Customer role has \"—\" for containers per the auth table — must return 403 Forbidden.",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{containerUrl}}/api/containers",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "🔔 Notification",
+			"description": "Notifications are created automatically by MassTransit consumers that react to events from Booking and Container services.\n\n**Read-only API:** Notifications are never created by direct POST — only via event consumers.\n\n**Auth:** admin/staff see all; customer sees only own (filtered by customer_id claim).\n\n**Events → Notifications:** Booking events carry CustomerId (customer-scoped), container events don't (admin-only).",
+			"item": [
+				{
+					"name": "GET List Notifications (admin)",
+					"description": "Admin/staff see ALL notifications across all event types (BookingCreated, BookingConfirmed, ContainerAllocated, ContainerStatusChanged, ShipmentStatusChanged).",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{notificationUrl}}/api/notifications",
+							"host": ["{{notificationUrl}}"],
+							"path": ["api", "notifications"]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const notifs = pm.response.json();",
+									"console.log(`Admin sees ${notifs.length} notifications`);",
+									"if (notifs.length > 0) {",
+									"    pm.collectionVariables.set(\"notificationId\", notifs[0].id);",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "GET List Notifications (customer)",
+					"description": "Customer sees only notifications where the source event's CustomerId matches their customer_id claim.\n\nYou should see fewer than admin (customer only gets BookingCreated + BookingConfirmed notifications).",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{notificationUrl}}/api/notifications",
+							"host": ["{{notificationUrl}}"],
+							"path": ["api", "notifications"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET Notification by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{adminToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{notificationUrl}}/api/notifications/{{notificationId}}",
+							"host": ["{{notificationUrl}}"],
+							"path": ["api", "notifications", "{{notificationId}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "🔐 Auth Tests",
+			"description": "Authentication and authorization boundary tests — verify that the security rules are correctly enforced.",
+			"item": [
+				{
+					"name": "GET No Token (expect 401)",
+					"description": "Verifies that unauthenticated requests are rejected.",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Customer Confirm (expect 403)",
+					"description": "Verifies that customer role cannot perform management operations (confirm).",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" }
+						],
+						"url": {
+							"raw": "{{bookingUrl}}/api/bookings/{{eventId}}/confirm",
+							"host": ["{{bookingUrl}}"],
+							"path": ["api", "bookings", "{{eventId}}", "confirm"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Customer Register Container (expect 403)",
+					"description": "Verifies customer role cannot access container endpoints (auth table: '—').",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{customerToken}}", "type": "text" },
+							{ "key": "Content-Type", "value": "application/json", "type": "text" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"containerNumber\": \"TEST0000001\",\n    \"type\": \"FT20\"\n}"
+						},
+						"url": {
+							"raw": "{{containerUrl}}/api/containers",
+							"host": ["{{containerUrl}}"],
+							"path": ["api", "containers"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{ "key": "bookingUrl", "value": "http://localhost:8081", "type": "string" },
+		{ "key": "containerUrl", "value": "http://localhost:8082", "type": "string" },
+		{ "key": "notificationUrl", "value": "http://localhost:8083", "type": "string" },
+		{ "key": "gatewayUrl", "value": "http://localhost:8080", "type": "string" },
+		{ "key": "jwtSecret", "value": "dev-only-signing-key-please-override-in-production", "type": "string" },
+		{ "key": "adminSub", "value": "11111111-1111-1111-1111-111111111111", "type": "string" },
+		{ "key": "customerSub", "value": "22222222-2222-2222-2222-222222222222", "type": "string" },
+		{ "key": "customerId", "value": "11111111-1111-1111-1111-111111111111", "type": "string" },
+		{ "key": "adminToken", "value": "", "type": "string" },
+		{ "key": "customerToken", "value": "", "type": "string" },
+		{ "key": "eventId", "value": "", "type": "string" },
+		{ "key": "bookingNumber", "value": "", "type": "string" },
+		{ "key": "containerId", "value": "", "type": "string" },
+		{ "key": "containerNumber", "value": "", "type": "string" },
+		{ "key": "notificationId", "value": "", "type": "string" }
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"exec": [
+					"// Auto-generate fresh JWT tokens before every request.",
+					"// Uses HS256 signing with the shared dev secret from .env.",
+					"const jwtSecret = pm.collectionVariables.get(\"jwtSecret\");",
+					"const adminSub = pm.collectionVariables.get(\"adminSub\");",
+					"const customerSub = pm.collectionVariables.get(\"customerSub\");",
+					"const customerId = pm.collectionVariables.get(\"customerId\");",
+					"",
+					"function b64UrlEncode(obj) {",
+					"    const json = JSON.stringify(obj);",
+					"    const wordArray = CryptoJS.enc.Utf8.parse(json);",
+					"    return CryptoJS.enc.Base64.stringify(wordArray)",
+					"        .replace(/=/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+					"}",
+					"",
+					"const now = Math.floor(Date.now() / 1000);",
+					"const header = { alg: \"HS256\", typ: \"JWT\" };",
+					"const adminPayload = {",
+					"    sub: adminSub, role: \"admin\", name: \"Admin User\",",
+					"    iss: \"ContainerFlow\", aud: \"ContainerFlow\",",
+					"    iat: now, exp: now + 7200",
+					"};",
+					"const customerPayload = {",
+					"    sub: customerSub, role: \"customer\", name: \"Customer One\",",
+					"    customer_id: customerId,",
+					"    iss: \"ContainerFlow\", aud: \"ContainerFlow\",",
+					"    iat: now, exp: now + 7200",
+					"};",
+					"",
+					"const adminData = b64UrlEncode(header) + '.' + b64UrlEncode(adminPayload);",
+					"const customerData = b64UrlEncode(header) + '.' + b64UrlEncode(customerPayload);",
+					"",
+					"const adminSig = CryptoJS.enc.Base64.stringify(",
+					"    CryptoJS.HmacSHA256(adminData, jwtSecret)",
+					").replace(/=/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+					"const customerSig = CryptoJS.enc.Base64.stringify(",
+					"    CryptoJS.HmacSHA256(customerData, jwtSecret)",
+					").replace(/=/g, '').replace(/\\+/g, '-').replace(/\\//g, '_');",
+					"",
+					"pm.collectionVariables.set(\"adminToken\", adminData + '.' + adminSig);",
+					"pm.collectionVariables.set(\"customerToken\", customerData + '.' + customerSig);"
+				]
+			}
+		}
+	]
+}
