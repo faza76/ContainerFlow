@@ -34,6 +34,10 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT}
       ASPNETCORE_URLS: http://+:8080
 
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+
       BookingApi__BaseUrl: http://booking-api:8080
       ContainerApi__BaseUrl: http://container-api:8080
       NotificationApi__BaseUrl: http://notification-api:8080
