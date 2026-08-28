@@ -98,6 +98,7 @@ try
     {
         var db = scope.ServiceProvider.GetRequiredService<BookingDbContext>();
         db.Database.EnsureCreated();
+        BookingSeedData.Seed(db);
     }
 
     app.Run();
