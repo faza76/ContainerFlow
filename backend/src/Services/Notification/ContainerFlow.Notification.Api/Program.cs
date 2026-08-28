@@ -105,6 +105,7 @@ try
     {
         var db = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
         db.Database.EnsureCreated();
+        NotificationSeedData.Seed(db);
     }
 
     app.Run();
