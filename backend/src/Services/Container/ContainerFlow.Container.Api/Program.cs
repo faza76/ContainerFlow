@@ -95,6 +95,7 @@ try
     {
         var db = scope.ServiceProvider.GetRequiredService<ContainerDbContext>();
         db.Database.EnsureCreated();
+        ContainerSeedData.Seed(db);
     }
 
     app.Run();
