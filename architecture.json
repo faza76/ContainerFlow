@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ContainerFlow — Runtime Architecture",
+    "quality_profile": "showcase",
+    "views": [
+      { "id": "primary-path", "label": "Primary request path", "focus": ["dashboard", "gateway", "booking-service", "booking-db"], "note": "Customer request flows from Vue dashboard through YARP gateway to Booking Service with database persistence." },
+      { "id": "async-events", "label": "Async event path", "focus": ["booking-service", "rabbitmq", "notification-service", "notification-db"], "note": "BookingConfirmed events flow through RabbitMQ to Notification Service for eventual consistency." }
+    ]
+  },
+  "components": [
+    { "id": "dashboard", "type": "frontend", "label": "Vue 3 Dashboard", "sublabel": "TypeScript · Tailwind", "pos": [40, 60], "size": [150, 60] },
+    { "id": "gateway", "type": "backend", "label": "YARP Gateway", "sublabel": "API Gateway · JWT Auth", "pos": [270, 60], "size": [150, 60] },
+    { "id": "booking-service", "type": "backend", "label": "Booking Service", "sublabel": "ASP.NET Core", "pos": [530, 60], "size": [160, 56] },
+    { "id": "booking-db", "type": "database", "label": "PostgreSQL", "sublabel": "booking_db", "pos": [530, 180], "size": [130, 50] },
+    { "id": "rabbitmq", "type": "messagebus", "label": "RabbitMQ", "sublabel": "MassTransit · Event Bus", "pos": [790, 110], "size": [150, 52] },
+    { "id": "notification-service", "type": "backend", "label": "Notification Service", "sublabel": "ASP.NET Core", "pos": [1020, 60], "size": [160, 56] },
+    { "id": "notification-db", "type": "database", "label": "PostgreSQL", "sublabel": "notification_db", "pos": [1020, 180], "size": [130, 50] },
+    { "id": "docker", "type": "cloud", "label": "Docker Compose", "sublabel": "Orchestration", "pos": [40, 180], "size": [150, 52] },
+    { "id": "container-service", "type": "backend", "label": "Container Service", "sublabel": "ASP.NET Core", "pos": [530, 280], "size": [160, 56] },
+    { "id": "container-db", "type": "database", "label": "PostgreSQL", "sublabel": "container_db", "pos": [790, 280], "size": [130, 50] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Docker Compose", "wraps": ["gateway", "booking-service", "booking-db", "rabbitmq", "notification-service", "notification-db", "container-service", "container-db"] }
+  ],
+  "connections": [
+    { "from": "dashboard", "to": "gateway", "label": "HTTP / REST", "variant": "emphasis" },
+    { "from": "gateway", "to": "booking-service", "label": "Route /api/bookings" },
+    { "from": "booking-service", "to": "booking-db", "label": "EF Core", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "from": "booking-service", "to": "rabbitmq", "label": "BookingConfirmed", "variant": "emphasis" },
+    { "from": "rabbitmq", "to": "notification-service", "label": "Consume events", "variant": "emphasis", "labelAt": [950, 48] },
+    { "from": "notification-service", "to": "notification-db", "label": "EF Core", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "from": "container-service", "to": "container-db", "label": "EF Core", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "External", "items": ["Vue 3 SPA served via Vite", "Communicates only with YARP Gateway on :8080", "JWT token stored client-side"] },
+    { "dot": "emerald", "title": "Trust boundary — Gateway", "items": ["YARP reverse proxy", "JWT validation + role-based authorization (admin / staff / customer)", "Routes /api/bookings, /api/containers, /api/notifications to internal services"] },
+    { "dot": "rose", "title": "Event-driven async", "items": ["RabbitMQ via MassTransit", "BookingConfirmed + ContainerStatusChanged events published by services", "Notification Service consumes independently — eventual consistency"] },
+    { "dot": "amber", "title": "Data isolation", "items": ["3 independent PostgreSQL instances (database-per-service)", "No cross-service DB queries", "EF Core per service boundary"] }
+  ]
+}
